@@ -1,0 +1,33 @@
+#!/bin/sh
+
+# ============================== #
+LED_R=/sys/class/leds/system-red
+LED_G=/sys/class/leds/system-green
+LED_B=/sys/class/leds/system-blue
+# ============================== #
+
+if [ $# != 3 ]; then
+	echo "Usage: led <red/green/blue> <on/off> [blink delay]"
+	exit 1
+fi
+
+case "$1" in
+	"red" )		LED_PATH=$LED_R;;
+	"green" )	LED_PATH=$LED_G;;
+	"blue" )	LED_PATH=$LED_B;;
+	* ) echo "Wrong LED_PATH! ($1)"; exit 1;;
+esac
+
+if [ $2 == "off" ]; then
+	echo none > $LED_PATH/trigger
+else
+	if [ $3 == 0 ]; then
+		echo default-on > $LED_PATH/trigger
+	else
+		if [ ! -f $LED_PATH/delay_on ] || [ ! -f $LED_PATH/delay_off ]; then
+			echo timer > $LED_PATH/trigger
+		fi
+		echo $3 > $LED_PATH/delay_on
+		echo $3 > $LED_PATH/delay_off
+	fi
+fi

@@ -35,16 +35,34 @@ cp -a /bin/busybox ${INITRAMFS_ROOT}/bin/busybox
 cp $(ldd "/bin/busybox" | egrep -o '/.* ') ${INITRAMFS_ROOT}/lib/
 
 cp -a /sbin/e2fsck ${INITRAMFS_ROOT}/sbin/e2fsck
+cp -a /usr/sbin/led ${INITRAMFS_ROOT}/sbin/led
 cp $(ldd "/sbin/e2fsck" | egrep -o '/.* ') ${INITRAMFS_ROOT}/lib/
 
 cat << EOF > ${INITRAMFS_ROOT}/init
 #!/bin/busybox sh
 /bin/busybox --install
 
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
 rescue_shell() {
 	printf '\e[1;31m' # bold red foreground
 	printf "\$1 Dropping you to a shell."
 	printf "\e[00m\n" # normal colour foreground
+
+	# Start network and run telnet server
+        ifconfig eth0 0.0.0.0 up
+
+        sleep 1
+        telnetd -l /bin/ash
+        tcpsvd -vE 0.0.0.0 21 ftpd -wA / &
+        
+        led red off 0
+        led green off 0
+        led blue off 0
+        # Blinking red/yellow
+        led red on 0
+        led green on 500
+
 	#exec setsid cttyhack /bin/busybox sh
 	exec /bin/busybox sh
 }
@@ -62,6 +80,12 @@ ask_for_stop() {
 mount -t devtmpfs none /dev || rescue_shell "mount /dev failed."
 mount -t proc none /proc || rescue_shell "mount /proc failed."
 mount -t sysfs none /sys || rescue_shell "mount /sys failed."
+
+echo "# Booting OS..."
+# Set led color to yellow
+led red on 0
+led green on 0
+led blue off 0
 
 ask_for_stop
 sleep 5
@@ -116,15 +140,16 @@ if [ ! -x /newroot/\${init} ] && [ ! -h /newroot/\${init} ] && [ -b /dev/sda1 ] 
 fi
 
 # WD My Cloud: turn led solid blue
-echo none > /sys/class/leds/system-blue/trigger
-echo default-on > /sys/class/leds/system-green/trigger
-echo ide-disk > /sys/class/leds/system-red/trigger
+led red off 0
+led green off 0
+led blue on 0
 
 # WD My Cloud: get mac from nand
-ip link set dev eth0 address \$(dd if=/dev/mtd0 bs=1 skip=1046528 count=17 2>/dev/null)
+ifconfig eth0 hw ether \$(dd if=/dev/mtd0 bs=1 skip=1046528 count=17 2>/dev/null)
+# ip link set dev eth0 address \$(dd if=/dev/mtd0 bs=1 skip=1046528 count=17 2>/dev/null)
 
 # clean up.
-umount /sys /proc /dev
+umount /sys /proc /dev 2> /dev/null
 
 # boot the real thing.
 exec switch_root /newroot \${init} || rescue_shell
