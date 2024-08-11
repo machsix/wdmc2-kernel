@@ -101,15 +101,13 @@ if [[ -z $BUILD_KERNEL ]] && [[ -z $BUILD_ROOTFS ]]; then
     [[ $selection == *8* ]] && ZRAM_ENABLED='on'
 
 else # at least kernel or rootfs has been selected via command line, check other options and set defaults
-    [[ -z $CLEAN_KERNEL_SRC  ]] && CLEAN_KERNEL_SRC='on'
+    [[ -z $CLEAN_KERNEL_SRC  ]] && CLEAN_KERNEL_SRC='off'
     [[ -z $ALLOW_KERNEL_CONFIG_CHANGES  ]] && ALLOW_KERNEL_CONFIG_CHANGES='off'
 
     [[ -z $ALLOW_ROOTFS_CHANGES  ]] && ALLOW_ROOTFS_CHANGES='off' 
     [[ -z $ASK_EXTRA_PKGS  ]] && ASK_EXTRA_PKGS='off'
-    [[ -z $ZRAM_ENABLED  ]] && ZRAM_ENABLED='on'
+    [[ -z $ZRAM_ENABLED  ]] && ZRAM_ENABLED='off'
 fi
-
-
 # inquire about further kernel configuration
 if [[ $BUILD_KERNEL == "on" ]] && [ -z "$kernel_branch" ]; then
     display_select "Kernel Building" "Please select the Linux Kernel branch to build." \
@@ -189,7 +187,7 @@ if [[ $BUILD_ROOTFS == "on" ]]; then
 
     if [ -z "$root_pw" ]; then
         # Adjust default root pw
-        display_input "Rootfs creation" "Type in the root password (Warning, root ssh will be enabled)" "1234"
+        display_input "Rootfs creation" "Type in the root password (Warning, root ssh will be enabled)" "root"
         root_pw="$selection"
     fi
 
