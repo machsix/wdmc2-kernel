@@ -68,7 +68,7 @@ if [[ -z $BUILD_KERNEL ]] && [[ -z $BUILD_ROOTFS ]]; then
     ALLOW_ROOTFS_CHANGES='off'
     ALLOW_CMDLINE_CHANGES='off'
     ASK_EXTRA_PKGS='off'
-    ZRAM_ENABLED='on'
+    ZRAM_ENABLED='off'
 
     # Show user checklist to select
     display_checklist "Build setup" "Select components and options for build:" \

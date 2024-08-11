@@ -2,12 +2,13 @@
 
 build_root_fs()
 {
+    alias cp="cp -p"
     # setup some more or less static config variables
     arch='armhf'
     qemu_binary='qemu-arm-static'
     components='main,contrib'
     # Adjust package list here
-    includes="bash,ccache,locales,git,ca-certificates,debhelper,rsync,python3,distcc,systemd,systemd-timesyncd,init,udev,kmod,busybox,ethtool,dirmngr,hdparm,ifupdown,iproute2,iputils-ping,logrotate,net-tools,nftables,powermgmt-base,procps,rename,resolvconf,rsyslog,ssh,sysstat,update-inetd,isc-dhcp-client,isc-dhcp-common,vim,dialog,apt-utils,nano,keyboard-configuration,console-setup,linux-base,cpio,u-boot-tools,bc,dbus" 
+    includes="bash,ccache,curl,locales,git,ca-certificates,debhelper,rsync,python3,distcc,systemd,systemd-timesyncd,init,udev,kmod,busybox,ethtool,dirmngr,hdparm,ifupdown,iproute2,iputils-ping,logrotate,net-tools,nftables,powermgmt-base,procps,rename,resolvconf,rsyslog,ssh,sysstat,update-inetd,isc-dhcp-client,isc-dhcp-common,vim,dialog,apt-utils,nano,keyboard-configuration,console-setup,linux-base,cpio,u-boot-tools,bc,dbus" 
     mirror_addr="http://deb.debian.org/debian/"
 
     # cleanup old
@@ -115,14 +116,16 @@ EOF
     if [[ ${ZRAM_ENABLED} == 'on' ]]; then
         chroot ${rootfs_dir} systemctl enable armbian-zram-config.service
         chroot ${rootfs_dir} systemctl enable armbian-ramlog.service
+    else
+	sed -i 's|#/dev/sda1|/dev/sda1|' "${rootfs_dir}"/etc/fstab.hdd
+	sed -i 's|#/dev/sda1|/dev/sdb3|' "${rootfs_dir}"/etc/fstab.usb
     fi
 
-    if [[ ${BUILD_KERNEL} == 'on' ]]; then
-        cp "${boot_dir}"/uRamdisk "${rootfs_dir}"/boot/
-        cp "${boot_dir}"/uImage-$kernel_version "${rootfs_dir}"/boot/
-        cp "${boot_dir}"/uImage-$kernel_version "${rootfs_dir}"/boot/uImage
-        cp -R "${output_dir}"/lib/* "${rootfs_dir}"/lib/
-    fi
+
+    cp "${boot_dir}"/*.config "${rootfs_dir}"/boot/
+    cp "${boot_dir}"/uImage-* "${rootfs_dir}"/boot/
+    cp "${boot_dir}"/uImage-* "${rootfs_dir}"/boot/uImage
+    cp -R "${output_dir}"/lib/* "${rootfs_dir}"/lib/
 
     cp build_initramfs.sh "${rootfs_dir}"/root/
     if [[ ${BUILD_INITRAMFS} == 'on' ]]; then
