@@ -90,6 +90,7 @@ To use the prebuilt releases on your wdmc you'll have to decide wether to use a 
 * create root ext4 partition as sda3
   * in original wd firmare this needed to be /dev/sda3 (as sda1 was swap and sda2 data)
   * new uRamdisk also supports booting from /dev/sda1 (though this is untested and might not work)
+  * format the partition as `mkfs -O ^64bit,^metadata_csum -t ext4 /dev/sda3` to prevent uboot unsportted ext4 features being added by the command `mkfs.ext4`
 * extract {release}-rootfs.tar.gz on the root
 * adjust sda3/etc/fstab to fit your needs (check it at least!)
 * boot wdmc, root password is '1234' configure/add packages as needed
