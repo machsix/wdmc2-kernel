@@ -1,0 +1,93 @@
+#!/bin/sh
+echo "# Loading, please wait..."
+export LD_LIBRARY_PATH=/lib
+
+# ========= VARS =========
+SWAP_DEV=/dev/sda1
+DATA_DEV=/dev/sda2
+ROOT_DEV=/dev/sda3
+USB_DEV=/dev/sda1
+RESCUE_DEV=/dev/sda1
+
+# Temp vars
+ROOTFS=/mnt/root
+RESCUE_FS=/mnt/rescue
+LOGFILE=${RESCUE_FS}/rescue.log
+ERR_MSG=""
+
+# ========= FUNC =========
+run_shell () {
+    echo "# Runing a shell..."
+    telnetd -l /bin/sh
+    tcpsvd -vE 0.0.0.0 21 ftpd -wA / &
+
+    mkdir -p ${RESCUE_FS}
+    mount ${RESCUE_DEV} ${RESCUE_FS}
+    rm -rf ${LOGFILE}
+    echo "$ERR_MSG" > ${LOGFILE}
+    echo "Disk: " >> ${LOGFILE}
+    ls /dev/sd* >> ${LOGFILE}
+
+    echo default-on > /sys/class/leds/system-blue/trigger
+    echo none > /sys/class/leds/system-green/trigger
+    echo none > /sys/class/leds/system-red/trigger
+
+    echo ===boot complete===
+    exec /bin/busybox sh
+}
+
+
+# ========= CODE =========
+echo "# Mounting filesystems..."
+mount -t devtmpfs devtmpfs /dev
+mount -t sysfs sysfs /sys
+mount -t proc proc /proc
+mkdir /dev/pts
+mount -t devpts devpts /dev/pts
+mkdir /dev/shm
+chmod 1777 /dev/shm/
+ln -s /proc/self/fd /dev/fd
+rm /dev/null
+mknod /dev/null c 1 3
+chmod 0666 /dev/null
+
+
+echo "# Bring internet up"
+ifconfig eth0 hw ether $(dd if=/dev/mtd0 bs=1 skip=1046528 count=17 2>/dev/null)
+ifconfig eth0 0.0.0.0 up
+udhcpc -i eth0 -s /etc/udhcpc.script -v
+date -s 2024.06.16-12:00:00
+ntpd -n -q -p pool.ntp.org
+while  [ ! -b /dev/sda1 ]; do mdev -s;done
+
+if [ -b /dev/sdb1 ]; then
+    USB_DEV=/dev/sdb1
+    RESCUE_DEV=${USB_DEV}
+elif [ -b ${ROOT_DEV} ]; then
+    RESCUE_DEV=${ROOT_DEV}
+fi
+
+if [ -b /dev/sdb1 ] && [ -b /dev/sda1 ]; then
+    ERR_MSG="rescue mode: both hdd and usb are plugged"
+    run_shell
+elif [ -b ${ROOT_DEV} ]; then
+    # only hdd is plugged
+    ERR_MSG="hdd boot: mount failure"
+    mkdir -p $ROOTFS
+    mount ${ROOT_DEV} $ROOTFS || run_shell
+    if [ -h $ROOTFS/sbin/init ] || [ -f $ROOTFS/sbin/init ]; then
+        umount /sys 2> /dev/null
+        umount /proc 2> /dev/null
+        umount /dev/pts 2> /dev/null
+        umount /dev 2> /dev/null
+        ERR_MSG="hdd boot: chroot failure"
+        exec switch_root -c /dev/console $ROOTFS /sbin/init || run_shell
+    else
+        ERR_MSG="hdd bot: /sbin/init not found!"
+        run_shell
+    fi
+else
+    # only usb is plugged
+    run_shell
+fi
+

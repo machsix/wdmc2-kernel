@@ -10,7 +10,12 @@ unalias -a
 # destination
 CURRENT_DIR=$PWD
 INITRAMFS=${CURRENT_DIR}/initramfs
+INITRAMFS_ROOTFS=${CURRENT_DIR}/initramfs_rootfs.tar.gz
 INITRAMFS_ROOT=${INITRAMFS}/root
+if [ ! -f ${INITRAMFS_ROOTFS} ]; then
+    echo "initramfs_rootfs.tar.gz is not found"
+    exit 1
+fi
 
 if [ "$1" = '--update' ]
 then
@@ -27,136 +32,34 @@ rm -rf ${INITRAMFS}/
 mkdir -p ${INITRAMFS}
 mkdir -p ${INITRAMFS_ROOT}
 
+tar xf ${INITRAMFS_ROOTFS} -C ${INITRAMFS_ROOT}
+
 echo '### Creating initramfs root'
 
-mkdir -p ${INITRAMFS_ROOT}/{bin,dev,etc,lib,lib64,newroot,proc,sbin,sys,usr} ${INITRAMFS_ROOT}/usr/{bin,sbin}
-cp -a /dev/{null,console,tty} ${INITRAMFS_ROOT}/dev
-cp -a /bin/busybox ${INITRAMFS_ROOT}/bin/busybox
-cp $(ldd "/bin/busybox" | egrep -o '/.* ') ${INITRAMFS_ROOT}/lib/
+mkdir -p ${INITRAMFS_ROOT}/{bin,dev,etc,lib,lib64,mnt,proc,sbin,sys,usr,run} ${INITRAMFS_ROOT}/usr/{bin,sbin}
 
-cp -a /sbin/e2fsck ${INITRAMFS_ROOT}/sbin/e2fsck
-cp -a /usr/sbin/led ${INITRAMFS_ROOT}/sbin/led
-cp $(ldd "/sbin/e2fsck" | egrep -o '/.* ') ${INITRAMFS_ROOT}/lib/
-
-cat << EOF > ${INITRAMFS_ROOT}/init
-#!/bin/busybox sh
-/bin/busybox --install
-
-export PATH=/bin:/sbin:/usr/bin:/usr/sbin
-
-rescue_shell() {
-	printf '\e[1;31m' # bold red foreground
-	printf "\$1 Dropping you to a shell."
-	printf "\e[00m\n" # normal colour foreground
-
-	# Start network and run telnet server
-        ifconfig eth0 0.0.0.0 up
-
-        sleep 1
-        telnetd -l /bin/ash
-        tcpsvd -vE 0.0.0.0 21 ftpd -wA / &
-        
-        led red off 0
-        led green off 0
-        led blue off 0
-        # Blinking red/yellow
-        led red on 0
-        led green on 500
-
-	#exec setsid cttyhack /bin/busybox sh
-	exec /bin/busybox sh
-}
-
-ask_for_stop() {
-        key='boot'
-        read -r -p "### Press any key to stop and run shell... (2)" -n1 -t5 key
-        if [ \$key != 'boot' ]; then
-                rescue_shell
-        fi
-}
-
-
-# initialise
-mount -t devtmpfs none /dev || rescue_shell "mount /dev failed."
-mount -t proc none /proc || rescue_shell "mount /proc failed."
-mount -t sysfs none /sys || rescue_shell "mount /sys failed."
-
-echo "# Booting OS..."
-# Set led color to yellow
-led red on 0
-led green on 0
-led blue off 0
-
-ask_for_stop
-sleep 5
-
-# get cmdline parameters
-init="/sbin/init"
-root=\$1
-rootflags=
-rootfstype=auto
-ro="ro"
-
-for param in \$(cat /proc/cmdline); do
-	case \$param in
-		init=*		) init=\${param#init=}			;;
-		root=*		) root=\${param#root=}			;;
-		rootfstype=*	) rootfstype=\${param#rootfstype=}	;;
-		rootflags=*	) rootflags=\${param#rootflags=}	;;
-		ro		) ro="ro"				;;
-		rw		) ro="rw"				;;
-	esac
+echo '### Install busybox'
+# Download a static-built busybox. The one shipped with Debian lacks telnetd and ftpd
+# curl https://files.serverless.industries/bin/busybox.armv7 -o ${INITRAMFS_ROOT}/bin/busybox
+curl https://www.busybox.net/downloads/binaries/1.21.1/busybox-armv7l -o ${INITRAMFS_ROOT}/bin/busybox
+chmod +x ${INITRAMFS_ROOT}/bin/busybox
+${INITRAMFS_ROOT}/bin/busybox --install -s ${INITRAMFS_ROOT}/bin
+for i in ${INITRAMFS_ROOT}/bin/*; do
+    exe_name=$(basename $i)
+    if [ "$exe_name" != "busybox" ]; then
+        ln -rsf ${INITRAMFS_ROOT}/bin/busybox $i
+    fi
 done
 
-# try to mount the root filesystem.
-if [ "\${root}"x != "/dev/ram"x ]; then
-	mount -t \${rootfstype} -o \${ro},\${rootflags} \${root} /newroot || rescue_shell "mount \${root} failed."
-fi
+cp -a /usr/sbin/led ${INITRAMFS_ROOT}/sbin/led
+EXTRA_EXE=("e2fsck")
+for i in "${EXTRA_EXE[@]}"; do
+    cp -L $(which $i) ${INITRAMFS_ROOT}/bin/$i
+    cp $(ldd ${INITRAMFS_ROOT}/bin/${i} | egrep -o '/.* ') ${INITRAMFS_ROOT}/lib/
+done
 
-# try 2nd partition on usb
-if [ ! -x /newroot/\${init} ] && [ ! -h /newroot/\${init} ] && [ -b /dev/sdb1 ] && [ -b /dev/sdb2 ]; then
-	mount -t \${rootfstype} -o \${ro},\${rootflags} /dev/sdb2 /newroot
-	if [ ! -x /newroot/\${init} ] && [ ! -h /newroot/\${init} ]; then
-		umount /dev/sdb2
-	fi
-fi
-
-# try 1st partition on hdd
-if [ ! -x /newroot/\${init} ] && [ ! -h /newroot/\${init} ] && [ -b /dev/sda1 ]; then
-	mount -t \${rootfstype} -o \${ro},\${rootflags} /dev/sda1 /newroot
-	if [ ! -x /newroot/\${init} ] && [ ! -h /newroot/\${init} ]; then	
-		umount /dev/sda1
-	fi
-fi
-
-
-# try 3rd partition on hdd
-if [ ! -x /newroot/\${init} ] && [ ! -h /newroot/\${init} ] && [ -b /dev/sda1 ] && [ -b /dev/sda3 ]; then
-	mount -t \${rootfstype} -o \${ro},\${rootflags} /dev/sda3 /newroot || rescue_shell "mount \${root} failed."
-	if [ ! -x /newroot/\${init} ] && [ ! -h /newroot/\${init} ]; then
-		umount /dev/sda3
-		rescue_shell "nothing bootable"
-	fi
-fi
-
-# WD My Cloud: turn led solid blue
-led red off 0
-led green off 0
-led blue on 0
-
-# WD My Cloud: get mac from nand
-ifconfig eth0 hw ether \$(dd if=/dev/mtd0 bs=1 skip=1046528 count=17 2>/dev/null)
-# ip link set dev eth0 address \$(dd if=/dev/mtd0 bs=1 skip=1046528 count=17 2>/dev/null)
-
-# clean up.
-umount /sys /proc /dev 2> /dev/null
-
-# boot the real thing.
-exec switch_root /newroot \${init} || rescue_shell
-
-rescue_shell "end reached"
-EOF
 chmod +x ${INITRAMFS_ROOT}/init
+chown -R root:root ${INITRAMSF_ROOT}
 
 echo '### Creating uRamdisk'
 

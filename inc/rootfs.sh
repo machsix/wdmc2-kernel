@@ -134,8 +134,9 @@ EOF
     cp -R "${output_dir}"/lib/* "${rootfs_dir}"/lib/
 
     cp build_initramfs.sh "${rootfs_dir}"/root/
+    find initramfs -printf "%P\n" | tar -czf "${rootfs_dir}"/root/initramfs_rootfs.tar.gz --no-recursion -C initramfs -T -
     if [[ ${BUILD_INITRAMFS} == 'on' ]]; then
-        chroot "${rootfs_dir}" /bin/bash -c "/root/build_initramfs.sh --update"
+        chroot "${rootfs_dir}" /bin/bash -c "cd /root && /root/build_initramfs.sh --update"
     fi
 
     if [[ ${ALLOW_ROOTFS_CHANGES} == 'on' ]]; then
