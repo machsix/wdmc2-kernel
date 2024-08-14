@@ -27,6 +27,8 @@ run_shell () {
     echo "$ERR_MSG" > ${LOGFILE}
     echo "Disk: " >> ${LOGFILE}
     ls /dev/sd* >> ${LOGFILE}
+    echo "Network: " >> ${LOGFILE}
+    ifconfig -a >> ${LOGFILE}
 
     echo default-on > /sys/class/leds/system-blue/trigger
     echo none > /sys/class/leds/system-green/trigger
@@ -54,6 +56,7 @@ chmod 0666 /dev/null
 
 echo "# Bring internet up"
 ifconfig eth0 hw ether $(dd if=/dev/mtd0 bs=1 skip=1046528 count=17 2>/dev/null)
+echo 1 > /proc/sys/net/ipv6/conf/eth0/disable_ipv6
 ifconfig eth0 0.0.0.0 up
 udhcpc -i eth0 -s /etc/udhcpc.script -v
 date -s 2024.06.16-12:00:00
